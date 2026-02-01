@@ -14,6 +14,11 @@ pkg/vonage/
 │   ├── ncco.go         # NCCOビルダー（Fluent API）
 │   ├── types.go        # Call, ASRResult, CallEvent等
 │   └── example_test.go # 使用例
+├── messages/
+│   ├── client.go       # Messages API クライアント（SMS/WhatsApp/Viber）
+│   ├── webhook.go      # Webhookハンドラー & パーサー
+│   ├── types.go        # SendRequest, InboundMessage, Status等
+│   └── example_test.go # 使用例
 └── video/
     ├── client.go       # Video API クライアント
     ├── token.go        # トークン生成（Fluent Builder対応）
@@ -154,8 +159,130 @@ if session.IsMock {
 
 - [x] Video API (`pkg/vonage/video`)
 - [x] Voice API (`pkg/vonage/voice`)
-- [ ] Messages API (`pkg/vonage/messages`)
+- [x] Messages API (`pkg/vonage/messages`)
 - [ ] Verify API (`pkg/vonage/verify`)
+
+---
+
+## Messages APIの使用
+
+### 1. クライアント作成
+
+```go
+import (
+    vonage "github.com/vonatrigger/poc/pkg/vonage"
+    "github.com/vonatrigger/poc/pkg/vonage/messages"
+)
+
+creds, err := vonage.NewCredentials(
+    vonage.WithApplication("your-app-id", privateKeyPEM),
+    vonage.WithPhoneNumber("81501234567"),
+)
+
+client, err := messages.NewClientFromCredentials(creds)
+```
+
+### 2. SMS送信
+
+```go
+// シンプルなSMS送信
+resp, err := client.SendSMS(ctx, "81901234567", "こんにちは！謎解きイベントへようこそ！")
+
+// クライアントリファレンス付きSMS（ステータス追跡用）
+resp, err := client.SendSMS(ctx, "81901234567", "ヒントです！",
+    messages.WithClientRef("hint-spot-001"),
+)
+```
+
+### 3. Fluent Message Builder
+
+```go
+// SMS
+resp, err := client.NewMessage().
+    To("81901234567").
+    SMS().
+    Text("謎解きのヒントです！").
+    ClientRef("conv-abc123").
+    Send(ctx)
+
+// WhatsApp画像
+resp, err := client.NewMessage().
+    To("81901234567").
+    WhatsApp().
+    Image("https://example.com/clue.jpg", "謎の手がかり").
+    Send(ctx)
+
+// Viber
+resp, err := client.NewMessage().
+    To("81901234567").
+    Viber().
+    Text("Viberからのメッセージです！").
+    Send(ctx)
+```
+
+### 4. マルチチャネル対応
+
+```go
+// WhatsApp テキスト
+client.SendWhatsApp(ctx, "81901234567", "WhatsAppメッセージ")
+
+// WhatsApp 画像
+client.SendWhatsAppImage(ctx, "81901234567", "https://example.com/map.jpg", "ヒント地図")
+
+// MMS 画像
+client.SendMMS(ctx, "81901234567", "https://example.com/clue.jpg", "手がかり")
+```
+
+### 5. Webhookハンドリング
+
+```go
+// net/http用ハンドラー
+handler := messages.NewWebhookHandler().
+    OnInbound(func(msg *messages.InboundMessage) error {
+        fmt.Printf("Received from %s: %s\n", msg.From, msg.Text)
+        return nil
+    }).
+    OnStatus(func(status *messages.MessageStatus) error {
+        if status.Status.IsFailed() {
+            log.Error().Str("error", status.Error.Detail).Msg("Message failed")
+        }
+        return nil
+    }).
+    OnLegacySMS(func(sms *messages.InboundSMS) error {
+        // 旧SMS APIフォーマットの処理
+        return nil
+    })
+
+http.HandleFunc("/webhooks/sms/inbound", handler.HandleInbound())
+http.HandleFunc("/webhooks/sms/status", handler.HandleStatus())
+```
+
+### 6. Echo/Ginフレームワークでのパース
+
+```go
+// Echo handler内で
+body, _ := io.ReadAll(c.Request().Body)
+msg, err := messages.ParseInboundMessage(body)  // 新旧フォーマット自動判別
+status, err := messages.ParseMessageStatus(body)
+```
+
+### 7. ステータス判定
+
+```go
+if status.Status.IsDelivered() { /* 配信成功 */ }
+if status.Status.IsFailed()    { /* 配信失敗 */ }
+if status.Status.IsTerminal()  { /* 最終状態（成功 or 失敗）*/ }
+```
+
+### 8. 既存サービスからの移行
+
+```go
+// internal/service/vonage_messages_v2.go を使用
+msgService, err := service.NewVonageMessagesServiceV2(cfg, secrets)
+
+// 同じインターフェースで使用可能
+smsResp, err := msgService.SendSMS(ctx, phoneNumber, text)
+```
 
 ---
 

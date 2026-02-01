@@ -1099,6 +1099,3 @@ jobs:
 
 ---
 
-## ライセンス
-
-Proprietary — All rights reserved.

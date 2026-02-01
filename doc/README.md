@@ -35,7 +35,7 @@ Vonage API の Go 言語向け SDK。VonaTrigger プロジェクトのサービ�
 
 ### パッケージ構成
 
-![パッケージ構成図](diagrams/architecture.puml)
+![パッケージ構成図](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/architecture.puml)
 
 ```
 VonageGoSDK/
@@ -157,7 +157,7 @@ func main() {
 
 ### 認証フロー
 
-![認証フロー](diagrams/auth-flow.puml)
+![認証フロー](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/auth-flow.puml)
 
 ### Credentials の作成
 
@@ -230,7 +230,7 @@ creds.HasAPIKey()       // APIKey + Secret が設定済みか
 
 ### セッション管理シーケンス
 
-![Video APIシーケンス](diagrams/video-session-sequence.puml)
+![Video APIシーケンス](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/video-session-sequence.puml)
 
 ### クライアント作成
 
@@ -336,7 +336,7 @@ client, err := voice.NewClientFromCredentials(creds)
 
 Vonage がユーザー応答時にサーバーの Answer URL を呼び出し、サーバーが NCCO を返すパターンです。
 
-![Answer URL方式](diagrams/voice-answer-url.puml)
+![Answer URL方式](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/voice-answer-url.puml)
 
 ```go
 resp, err := client.CreateCallToPhone(ctx, "81901234567",
@@ -349,7 +349,7 @@ resp, err := client.CreateCallToPhone(ctx, "81901234567",
 
 発信時に NCCO を直接指定するパターンです。Webhook サーバー不要で簡潔です。
 
-![AI通話シーケンス](diagrams/voice-call-sequence.puml)
+![AI通話シーケンス](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/voice-call-sequence.puml)
 
 ```go
 ncco := voice.TalkJapanese("お電話ありがとうございます。")
@@ -362,7 +362,7 @@ resp, err := client.CreateCallWithNCCO(ctx, "81901234567", ncco,
 
 NCCO（Nexmo Call Control Object）は通話の動作を定義する JSON 配列です。Builder パターンで型安全に構築できます。
 
-![NCCO Builder構造](diagrams/ncco-builder.puml)
+![NCCO Builder構造](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/ncco-builder.puml)
 
 #### 基本的な組み立て方
 
@@ -592,7 +592,7 @@ SMS / MMS / WhatsApp / Viber などのマルチチャネルメッセージ送受
 
 ### SMS 送受信シーケンス
 
-![Messages APIシーケンス](diagrams/messages-sequence.puml)
+![Messages APIシーケンス](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/messages-sequence.puml)
 
 ### クライアント作成
 
@@ -676,7 +676,7 @@ client.SendMMS(ctx, "81901234567", "https://example.com/clue.jpg", "手がかり
 
 ### Webhook ハンドリング
 
-![Webhookハンドリングフロー](diagrams/webhook-handling.puml)
+![Webhookハンドリングフロー](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/webhook-handling.puml)
 
 #### net/http 向けハンドラー
 
@@ -764,7 +764,7 @@ messages.ChannelMessenger  // "messenger"
 
 ### 電話番号認証シーケンス
 
-![Verify APIシーケンス](diagrams/verify-sequence.puml)
+![Verify APIシーケンス](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/verify-sequence.puml)
 
 ### クライアント作成
 
@@ -899,7 +899,7 @@ check, err := client.CheckV2(ctx, requestID, code)
 
 ### 移行パターン
 
-![移行パターン](diagrams/migration.puml)
+![移行パターン](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/migration.puml)
 
 `internal/service/` の V2 ラッパーが既存インターフェースを実装しているため、呼び出し側の変更は最小限です。
 
@@ -964,7 +964,7 @@ result, err := verifyClient.StartVerification(ctx, phone, &verify.StartOptions{
 
 SDK の全 API を組み合わせた VonaTrigger の謎解きイベントフローです。
 
-![VonaTrigger統合フロー](diagrams/vonatrigger-integration.puml)
+![VonaTrigger統合フロー](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/vonatrigger-integration.puml)
 
 ### エラーハンドリング
 
@@ -997,7 +997,7 @@ vonage.ErrServerError    // サーバーエラー（5xx）
 
 ## ダイアグラム一覧
 
-すべてのダイアグラムは `docs/diagrams/` ディレクトリに PlantUML 形式で格納されています。
+すべてのダイアグラムは `doc/diagrams/` ディレクトリに PlantUML 形式で格納されています。
 
 | ファイル | 種類 | 内容 |
 |---------|------|------|
@@ -1020,29 +1020,32 @@ vonage.ErrServerError    // サーバーエラー（5xx）
 brew install plantuml
 
 # 全図を一括生成
-plantuml docs/diagrams/*.puml -o ../images
+plantuml doc/diagrams/*.puml -o ../images
 
 # 個別生成（SVG）
-plantuml docs/diagrams/architecture.puml -tsvg
+plantuml doc/diagrams/architecture.puml -tsvg
 ```
 
 ### GitHub での表示
 
-GitHub は PlantUML を直接レンダリングしません。以下の方法で表示できます。
+GitHub は PlantUML を直接レンダリングしません。本ドキュメントでは **方法 1（PlantUML Proxy）** を適用済みです。
 
-**方法 1: PlantUML Proxy を利用**
+**方法 1: PlantUML Proxy を利用（✅ 本ドキュメントで採用）**
 
-Markdown 内の画像リンクを以下に差し替えます：
+画像リンクを以下の形式にすると、GitHub 上で自動描画されます：
 
 ```markdown
-![図の名前](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/docs/diagrams/architecture.puml)
+![図の名前](https://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/oic0310/VonageGoSDK/develop/doc/diagrams/architecture.puml)
 ```
+
+> ⚠️ `.puml` ファイルを更新した場合、PlantUML Proxy のキャッシュにより反映まで数分かかることがあります。
+> `&cache=no` パラメータを付与するとキャッシュを回避できます。
 
 **方法 2: 画像を事前生成してコミット**
 
 ```bash
-plantuml docs/diagrams/*.puml -o ../images -tpng
-# docs/images/ に PNG が生成される → git add してコミット
+plantuml doc/diagrams/*.puml -o ../images -tpng
+# doc/images/ に PNG が生成される → git add してコミット
 ```
 
 **方法 3: GitHub Actions で自動生成**
@@ -1053,7 +1056,7 @@ name: Generate PlantUML diagrams
 on:
   push:
     paths:
-      - 'docs/diagrams/**'
+      - 'doc/diagrams/**'
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -1061,8 +1064,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: grassedge/generate-plantuml-action@v1
         with:
-          path: docs/diagrams
-          output: docs/images
+          path: doc/diagrams
+          output: doc/images
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```

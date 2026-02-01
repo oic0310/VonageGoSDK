@@ -1,0 +1,99 @@
+@startuml voice-call-sequence
+!theme plain
+skinparam defaultFontName "Noto Sans CJK JP"
+skinparam backgroundColor #FEFEFE
+skinparam sequence {
+    ArrowColor #495057
+    LifeLineBorderColor #6C757D
+    ParticipantBackgroundColor #FFF3E0
+    ParticipantBorderColor #E65100
+}
+
+title Voice API — AI 通話シーケンス
+
+actor "ユーザー" as User
+participant "電話端末" as Phone
+participant "アプリサーバー" as Server
+participant "Voice SDK\nClient" as SDK
+participant "NCCO\nBuilder" as NCCO
+participant "Vonage\nVoice API" as Vonage
+
+== 1. 発信（インライン NCCO） ==
+
+Server -> NCCO : TalkAndInputJapanese(\n  "ご用件をどうぞ",\n  inputEventURL,\n)
+activate NCCO
+NCCO --> Server : NCCO (JSON配列)
+deactivate NCCO
+note right of NCCO
+  [
+    {"action":"talk",
+     "text":"ご用件をどうぞ",
+     "voiceName":"Mizuki",
+     "language":"ja-JP"},
+    {"action":"input",
+     "type":["speech"],
+     "eventUrl":["..."],
+     "endOnSilence":1.5}
+  ]
+end note
+
+Server -> SDK : CreateCallWithNCCO(\n  ctx, "81901234567",\n  ncco, eventURL,\n)
+activate SDK
+SDK -> Vonage : POST /v1/calls\n{"to": [{"type":"phone","number":"8190..."}],\n "ncco": [...],\n "event_url": ["..."]}
+activate Vonage
+Vonage --> SDK : {"uuid": "call-uuid", "status": "started"}
+deactivate Vonage
+SDK --> Server : *CreateCallResponse
+deactivate SDK
+
+Vonage -> Phone : 発信
+Phone -> User : 着信音
+
+== 2. ユーザー応答 ==
+
+User -> Phone : 応答
+Phone -> Vonage : 応答通知
+Vonage -> Server : POST /event\n{"status": "answered"}
+
+Vonage -> Phone : TTS 再生\n「ご用件をどうぞ」
+User -> Phone : 音声入力\n「東京タワーのヒントをください」
+Phone -> Vonage : 音声データ
+
+== 3. 音声認識結果 ==
+
+Vonage -> Server : POST /input\n(ASR結果)
+activate Server
+note right of Vonage
+  {"speech": {
+    "results": [{
+      "text": "東京タワーの...",
+      "confidence": "0.95"
+    }]
+  }}
+end note
+
+Server -> Server : var asr voice.ASRResult\nasr.BestTranscript()\n→ "東京タワーのヒントをください"
+Server -> Server : AI処理（Bedrock等）\n→ 応答テキスト生成
+
+== 4. AI 応答（通話中 TTS 注入） ==
+
+Server -> SDK : TalkIntoCall(\n  ctx, callUUID,\n  "東京タワーの近くに...",\n  "Mizuki", 1,\n)
+activate SDK
+SDK -> Vonage : PUT /v1/calls/{uuid}/talk\n{"text": "東京タワーの近くに...",\n "voice_name": "Mizuki"}
+Vonage --> SDK : 200 OK
+deactivate SDK
+
+Vonage -> Phone : TTS 再生\n「東京タワーの近くに...」
+
+== 5. 通話終了 ==
+
+Server -> SDK : HangupCall(ctx, callUUID)
+activate SDK
+SDK -> Vonage : PUT /v1/calls/{uuid}\n{"action": "hangup"}
+Vonage --> SDK : 200 OK
+deactivate SDK
+
+Vonage -> Phone : 切断
+deactivate Server
+
+@enduml

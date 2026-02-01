@@ -1,0 +1,100 @@
+@startuml vonatrigger-integration
+!theme plain
+skinparam defaultFontName "Noto Sans CJK JP"
+skinparam backgroundColor #FEFEFE
+skinparam sequence {
+    ArrowColor #495057
+    LifeLineBorderColor #6C757D
+}
+
+title VonaTrigger — SDK 統合利用シーケンス（謎解きイベントフロー）
+
+actor "参加者" as User
+participant "モバイルアプリ\n(React)" as App #E3F2FD
+participant "サーバー" as Server #F5F5F5
+participant "Verify SDK" as VerifySDK #FCE4EC
+participant "Messages SDK" as MsgSDK #F3E5F5
+participant "Voice SDK" as VoiceSDK #FFF3E0
+participant "Video SDK" as VideoSDK #E8F5E9
+participant "Vonage" as Vonage #ECEFF1
+participant "AWS Bedrock\n(Claude)" as AI #FFF9C4
+
+== Phase 1: ユーザー登録 & 電話番号認証 ==
+
+User -> App : アプリ起動 & 電話番号入力
+App -> Server : POST /users/phone/register
+Server -> VerifySDK : StartVerification(ctx, phone, nil)
+VerifySDK -> Vonage : POST /verify/json
+Vonage --> VerifySDK : request_id
+Vonage -> User : SMS「認証コード: 456789」
+User -> App : コード入力
+App -> Server : POST /users/phone/verify
+Server -> VerifySDK : CheckVerification(ctx, reqID, code)
+VerifySDK -> Vonage : POST /verify/check/json
+Vonage --> VerifySDK : status: "0" (成功)
+Server --> App : ✅ 電話番号認証完了
+
+== Phase 2: イベント開始 & ウェルカムコール ==
+
+User -> App : イベント参加
+App -> Server : POST /ai/call/welcome
+
+Server -> VoiceSDK : CreateCallWithNCCO(\n  ctx, phone,\n  TalkJapanese(welcomeMsg),\n  eventURL,\n)
+VoiceSDK -> Vonage : POST /v1/calls
+Vonage -> User : ☎️ ウェルカムコール\n「ようこそ！謎解きイベントへ！」
+
+== Phase 3: スポット到着 & 映像視聴 ==
+
+User -> App : スポットに到着（ジオフェンス検知）
+App -> Server : POST /rooms/:spotId/enter
+
+Server -> VideoSDK : CreateSession(ctx, nil)
+VideoSDK -> Vonage : POST /session/create
+Vonage --> VideoSDK : sessionId
+
+Server -> VideoSDK : GenerateToken(sessionID).\n  Role(RolePublisher).Build()
+VideoSDK --> Server : token
+
+Server --> App : {sessionId, token}
+App -> Vonage : WebRTC 接続 → 映像視聴 🎥
+
+== Phase 4: AI キャラクターとの通話 ==
+
+User -> App : 「ヒントを聞く」ボタン
+App -> Server : POST /ai/call/initiate
+
+Server -> VoiceSDK : CreateCallToPhone(\n  ctx, phone,\n  answerURL, eventURL,\n)
+VoiceSDK -> Vonage : POST /v1/calls
+Vonage -> User : ☎️ 着信
+
+Vonage -> Server : GET /answer (Webhook)
+Server -> Server : NCCO Builder:\nTalkAndInputJapanese(\n  "ご用件をどうぞ",\n  inputURL,\n)
+Server --> Vonage : NCCO
+
+Vonage -> User : TTS「ご用件をどうぞ」
+User -> Vonage : 🎤「東京タワーのヒントをください」
+Vonage -> Server : POST /input (ASR結果)
+
+Server -> Server : asr.BestTranscript()
+Server -> AI : AI 応答生成
+AI --> Server : "東京タワーの展望台から..."
+
+Server -> VoiceSDK : TalkIntoCall(\n  ctx, callUUID,\n  aiResponse, "Mizuki", 1,\n)
+VoiceSDK -> Vonage : PUT /v1/calls/{uuid}/talk
+Vonage -> User : TTS「東京タワーの展望台から...」
+
+== Phase 5: クイズ正解 & 結果通知 ==
+
+User -> App : クイズ回答送信
+App -> Server : POST /quizzes/:id/submit
+Server -> Server : 正解判定 ✅
+
+Server -> MsgSDK : SendSMS(ctx, phone,\n  "🎉 正解！次のスポットは...",\n  WithClientRef("quiz-result"),\n)
+MsgSDK -> Vonage : POST /v1/messages
+Vonage -> User : SMS「🎉 正解！次のスポットは...」
+
+Server -> MsgSDK : NewMessage().\n  To(phone).WhatsApp().\n  Image(mapURL, "次のスポット地図").\n  Send(ctx)
+MsgSDK -> Vonage : POST /v1/messages
+Vonage -> User : WhatsApp 画像「次のスポット地図」
+
+@enduml

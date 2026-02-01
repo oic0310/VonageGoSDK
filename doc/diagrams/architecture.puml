@@ -1,0 +1,93 @@
+@startuml architecture
+!theme plain
+skinparam componentStyle rectangle
+skinparam defaultFontName "Noto Sans CJK JP"
+skinparam backgroundColor #FEFEFE
+skinparam component {
+    BackgroundColor #F8F9FA
+    BorderColor #495057
+    FontSize 13
+}
+skinparam package {
+    BackgroundColor #FFFFFF
+    BorderColor #6C757D
+    FontSize 14
+}
+skinparam note {
+    BackgroundColor #FFF3CD
+    BorderColor #FFC107
+}
+
+title VonageGoSDK パッケージ構成図
+
+package "pkg/vonage" as core <<共通基盤>> #E3F2FD {
+    component "auth.go" as auth {
+    }
+    note right of auth
+        Credentials
+        JWTGenerator
+        ParseRSAPrivateKey
+    end note
+
+    component "client.go" as client
+    component "errors.go" as errors
+}
+
+package "pkg/vonage/video" as videopkg <<Video API>> #E8F5E9 {
+    component "client.go" as vclient
+    component "token.go" as vtoken
+    component "types.go" as vtypes
+}
+
+package "pkg/vonage/voice" as voicepkg <<Voice API>> #FFF3E0 {
+    component "client.go" as voclient
+    component "ncco.go" as ncco
+    component "types.go" as votypes
+}
+
+package "pkg/vonage/messages" as msgpkg <<Messages API>> #F3E5F5 {
+    component "client.go" as mclient
+    component "webhook.go" as mwebhook
+    component "types.go" as mtypes
+}
+
+package "pkg/vonage/verify" as verifypkg <<Verify API>> #FCE4EC {
+    component "client.go" as verclient
+    component "types.go" as vertypes
+}
+
+package "internal/service" as svc <<後方互換ラッパー>> #F5F5F5 {
+    component "vonage_video_v2.go" as sv2
+    component "vonage_voice_v2.go" as svo2
+    component "vonage_messages_v2.go" as sm2
+    component "vonage_verify_v2.go" as sve2
+}
+
+package "Vonage API" as vonageapi <<外部サービス>> #ECEFF1 {
+    component "Video API\nvideo.api.vonage.com" as vapi
+    component "Voice API\napi.nexmo.com/v1/calls" as voapi
+    component "Messages API\napi.nexmo.com/v1/messages" as mapi
+    component "Verify API v1\napi.nexmo.com/verify" as ve1api
+    component "Verify API v2\napi.nexmo.com/v2/verify" as ve2api
+}
+
+' 共通基盤への依存
+videopkg ..> core : JWT認証
+voicepkg ..> core : JWT認証
+msgpkg ..> core : JWT認証
+verifypkg ..> core : Basic + JWT認証
+
+' ラッパーの依存
+sv2 --> videopkg
+svo2 --> voicepkg
+sm2 --> msgpkg
+sve2 --> verifypkg
+
+' 外部API呼び出し
+vclient --> vapi : HTTPS
+voclient --> voapi : HTTPS
+mclient --> mapi : HTTPS
+verclient --> ve1api : Basic Auth
+verclient --> ve2api : JWT Auth
+
+@enduml

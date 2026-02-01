@@ -1,0 +1,66 @@
+@startuml auth-flow
+!theme plain
+skinparam defaultFontName "Noto Sans CJK JP"
+skinparam backgroundColor #FEFEFE
+skinparam sequence {
+    ArrowColor #495057
+    LifeLineBorderColor #6C757D
+    ParticipantBackgroundColor #E3F2FD
+    ParticipantBorderColor #1565C0
+}
+
+title 認証フロー
+
+actor "アプリケーション" as App
+participant "Credentials" as Creds
+participant "JWTGenerator" as JWT
+participant "API Client\n(Voice/Video/Messages)" as Client
+participant "Vonage API" as API
+
+== JWT 認証（Video / Voice / Messages API） ==
+
+App -> Creds : NewCredentials(\n  WithApplication(appID, privateKeyPEM),\n  WithPhoneNumber("8150..."),\n)
+activate Creds
+Creds -> Creds : ParseRSAPrivateKey(PEM)
+Creds --> App : *Credentials
+deactivate Creds
+
+App -> Client : NewClientFromCredentials(creds)
+activate Client
+Client -> JWT : NewJWTGenerator(appID, privateKey)
+Client --> App : *Client
+deactivate Client
+
+App -> Client : SendSMS(ctx, to, text)
+activate Client
+Client -> JWT : GenerateAPIJWT()
+activate JWT
+JWT -> JWT : RSA-SHA256 署名\n(有効期限: 5分)
+JWT --> Client : JWT トークン
+deactivate JWT
+
+Client -> API : POST /v1/messages\nAuthorization: Bearer <JWT>\nContent-Type: application/json
+activate API
+API --> Client : 202 Accepted\n{"message_uuid": "..."}
+deactivate API
+Client --> App : *SendResponse
+deactivate Client
+
+== Basic 認証（Verify API v1） ==
+
+App -> Creds : NewCredentials(\n  WithAPIKey(apiKey, apiSecret),\n)
+Creds --> App : *Credentials
+
+App -> Client : NewClientFromCredentials(creds)
+Client --> App : *Client
+
+App -> Client : StartVerification(ctx, phone, nil)
+activate Client
+Client -> API : POST /verify/json\nAuthorization: Basic <key:secret>\n{"number": "8190..."}
+activate API
+API --> Client : {"request_id": "...", "status": "0"}
+deactivate API
+Client --> App : *VerificationResult
+deactivate Client
+
+@enduml

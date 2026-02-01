@@ -1,0 +1,104 @@
+@startuml verify-sequence
+!theme plain
+skinparam defaultFontName "Noto Sans CJK JP"
+skinparam backgroundColor #FEFEFE
+skinparam sequence {
+    ArrowColor #495057
+    LifeLineBorderColor #6C757D
+    ParticipantBackgroundColor #FCE4EC
+    ParticipantBorderColor #AD1457
+}
+
+title Verify API — 電話番号認証シーケンス
+
+actor "ユーザー" as User
+participant "クライアント\n(Web/App)" as Client
+participant "アプリサーバー" as Server
+participant "Verify SDK\nClient" as SDK
+participant "Vonage\nVerify API" as Vonage
+participant "携帯端末" as Phone
+
+== v1: SMS 認証フロー ==
+
+User -> Client : 電話番号入力\n"090-1234-5678"
+Client -> Server : POST /users/phone/register\n{"phoneNumber":"81901234567"}
+activate Server
+
+Server -> SDK : StartVerification(\n  ctx, "81901234567", nil,\n)
+activate SDK
+note right of SDK
+  opts == nil → デフォルト:
+  Brand: "VonaTrigger"
+  CodeLength: 6
+  Locale: "ja-jp"
+end note
+
+SDK -> Vonage : POST /verify/json\nAuthorization: Basic <key:secret>\n{"number":"81901234567",\n "brand":"VonaTrigger",\n "code_length":6,\n "locale":"ja-jp"}
+activate Vonage
+Vonage --> SDK : {"request_id":"req-123",\n "status":"0"}
+deactivate Vonage
+SDK --> Server : *VerificationResult\n{RequestID: "req-123"}
+deactivate SDK
+
+Server --> Client : {"requestId":"req-123",\n "status":"pending"}
+deactivate Server
+
+Vonage -> Phone : SMS 送信\n「VonaTrigger 認証コード: 456789」
+Phone -> User : SMS 受信
+
+User -> Client : コード入力\n"456789"
+Client -> Server : POST /users/phone/verify\n{"requestId":"req-123",\n "code":"456789",\n "phoneNumber":"81901234567"}
+activate Server
+
+Server -> SDK : CheckVerification(\n  ctx, "req-123", "456789",\n)
+activate SDK
+SDK -> Vonage : POST /verify/check/json\nAuthorization: Basic <key:secret>\n{"request_id":"req-123",\n "code":"456789"}
+activate Vonage
+Vonage --> SDK : {"request_id":"req-123",\n "status":"0"}
+deactivate Vonage
+SDK --> Server : *CheckResult\n{Verified: true}
+deactivate SDK
+
+Server -> Server : DB更新:\nPhoneVerified = true
+
+Server --> Client : {"verified": true}
+deactivate Server
+
+Client -> User : ✅ 電話番号認証完了！
+
+== v2: マルチチャネルフォールバック ==
+
+Server -> SDK : StartVerification(ctx, phone,\n  &StartOptions{\n    V2Channels: [\n      V2ChannelSMS,\n      V2ChannelWhatsApp,\n    ],\n    ChannelTimeout: 60,\n  },\n)
+activate SDK
+SDK -> Vonage : POST /v2/verify\nAuthorization: Bearer <JWT>\n{"brand":"VonaTrigger",\n "workflow":[\n  {"channel":"sms","to":"..."},\n  {"channel":"whatsapp","to":"..."}\n ]}
+activate Vonage
+Vonage --> SDK : {"request_id":"req-456"}
+deactivate Vonage
+SDK --> Server : *VerificationResult
+deactivate SDK
+
+Vonage -> Phone : 1) SMS 送信
+note right of Vonage
+  60秒以内に認証されない場合
+  自動的に WhatsApp に切り替え
+end note
+
+Vonage -> Phone : 2) WhatsApp 送信\n（60秒後フォールバック）
+
+== キャンセル ==
+
+Server -> SDK : CancelVerification(\n  ctx, "req-123",\n)
+activate SDK
+
+alt v2 が利用可能
+    SDK -> Vonage : DELETE /v2/verify/req-123\nAuthorization: Bearer <JWT>
+    Vonage --> SDK : 204 No Content
+else v1 フォールバック
+    SDK -> Vonage : POST /verify/control/json\n{"request_id":"req-123",\n "cmd":"cancel"}
+    Vonage --> SDK : {"status":"0"}
+end
+
+SDK --> Server : nil (成功)
+deactivate SDK
+
+@enduml

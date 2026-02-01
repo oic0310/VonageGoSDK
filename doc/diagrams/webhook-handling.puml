@@ -1,0 +1,87 @@
+@startuml webhook-handling
+!theme plain
+skinparam defaultFontName "Noto Sans CJK JP"
+skinparam backgroundColor #FEFEFE
+skinparam activity {
+    BackgroundColor #F3E5F5
+    BorderColor #6A1B9A
+    FontSize 12
+}
+
+title Webhook ハンドリングフロー — Messages API
+
+start
+
+:Vonage から Webhook 受信;
+note right
+  POST /webhooks/sms/inbound
+  または
+  POST /webhooks/sms/status
+end note
+
+if (エンドポイント?) then (inbound)
+    :リクエストボディ読み取り;
+
+    if (ParseInboundMessage(body)) then (成功)
+        :InboundMessage 取得;
+
+        if (msg.MessageUUID != "") then (Messages API 形式)
+            :新形式として処理;
+            note right
+                message_uuid, from, to,
+                channel, message_type,
+                text, image, audio...
+            end note
+        else (旧 SMS 形式)
+            :InboundSMS → InboundMessage 変換;
+            note right
+                msisdn → from
+                messageId → message_uuid
+                channel = "sms"
+            end note
+        endif
+
+        :OnInbound ハンドラー実行;
+        note right
+            ユーザー特定（From）
+            AI処理
+            応答SMS送信
+        end note
+
+    else (パース失敗)
+        :ログ出力（Unknown format）;
+    endif
+
+else (status)
+    :ParseMessageStatus(body);
+
+    :MessageStatus 取得;
+
+    if (status.IsFailed()) then (失敗)
+        :エラーログ記録;
+        note right
+            error.type
+            error.detail
+        end note
+    elseif (status.IsDelivered()) then (配信完了)
+        :配信確認を DB に記録;
+        note right
+            client_ref でメッセージ特定
+        end note
+    else (submitted 等)
+        :中間ステータスをログ;
+    endif
+
+    :OnStatus ハンドラー実行;
+endif
+
+:HTTP 200 OK を返却;
+note right
+  Webhook は常に
+  200 を返す
+  （リトライ防止）
+end note
+
+stop
+
+@enduml

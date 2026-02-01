@@ -1,0 +1,63 @@
+@startuml migration
+!theme plain
+skinparam defaultFontName "Noto Sans CJK JP"
+skinparam backgroundColor #FEFEFE
+skinparam component {
+    FontSize 12
+}
+skinparam package {
+    FontSize 13
+}
+
+title 移行パターン — 旧サービスから SDK への段階的移行
+
+package "Phase 1: 旧サービス（現状）" as phase1 #FFF3E0 {
+    component "handler/*.go" as h1
+    component "VonageService\n(internal/service/vonage.go)" as old
+    component "Vonage API" as api1
+
+    h1 --> old : CreateCall()\nSendSMS()\nStartVerification()
+    old --> api1 : 直接 HTTP 呼び出し
+}
+
+package "Phase 2: V2 ラッパー経由（互換移行）" as phase2 #E3F2FD {
+    component "handler/*.go\n(変更なし)" as h2
+    component "VonageServiceV2\nVonageMessagesServiceV2\nVonageVerifyServiceV2\n(internal/service/*_v2.go)" as wrapper
+    component "SDK\n(pkg/vonage/*)" as sdk2
+    component "Vonage API" as api2
+
+    h2 --> wrapper : 同じインターフェース\nCreateCall()\nSendSMS()\nStartVerification()
+    wrapper --> sdk2 : SDK メソッド呼び出し
+    sdk2 --> api2 : JWT / Basic Auth
+}
+
+package "Phase 3: SDK 直接利用（最終形）" as phase3 #E8F5E9 {
+    component "handler/*.go\n(SDK 直接利用)" as h3
+    component "SDK\n(pkg/vonage/*)" as sdk3
+    component "Vonage API" as api3
+
+    h3 --> sdk3 : Fluent API\nNCCO Builder\nMessage Builder\nマルチチャネル
+    sdk3 --> api3 : JWT / Basic Auth
+}
+
+phase1 -[hidden]down-> phase2
+phase2 -[hidden]down-> phase3
+
+note bottom of phase1
+  既存コードはそのまま動作
+  変更リスクなし
+end note
+
+note bottom of phase2
+  ハンドラー側の変更ゼロ
+  サービス初期化を V2 に差し替えるだけ
+  新機能（キャンセル等）も利用可能
+end note
+
+note bottom of phase3
+  SDK のフル機能を活用
+  NCCOBuilder / MessageBuilder
+  マルチチャネル / v2 Verify
+end note
+
+@enduml

@@ -1,0 +1,102 @@
+@startuml messages-sequence
+!theme plain
+skinparam defaultFontName "Noto Sans CJK JP"
+skinparam backgroundColor #FEFEFE
+skinparam sequence {
+    ArrowColor #495057
+    LifeLineBorderColor #6C757D
+    ParticipantBackgroundColor #F3E5F5
+    ParticipantBorderColor #6A1B9A
+}
+
+title Messages API — SMS / マルチチャネル送受信シーケンス
+
+actor "ユーザー" as User
+participant "携帯端末" as Phone
+participant "アプリサーバー" as Server
+participant "Messages SDK\nClient" as SDK
+participant "Webhook\nHandler" as WH
+participant "Vonage\nMessages API" as Vonage
+
+== 1. SMS 送信（便利メソッド） ==
+
+Server -> SDK : SendSMS(ctx,\n  "81901234567",\n  "ヒント: 東京タワー付近を探索！",\n  WithClientRef("hint-001"),\n)
+activate SDK
+SDK -> SDK : JWT 生成
+SDK -> Vonage : POST /v1/messages\n{"from":"81501234567",\n "to":"81901234567",\n "message_type":"text",\n "text":"ヒント: ...",\n "channel":"sms",\n "client_ref":"hint-001"}
+activate Vonage
+Vonage --> SDK : 202 Accepted\n{"message_uuid": "msg-uuid-001"}
+deactivate Vonage
+SDK --> Server : *SendResponse
+deactivate SDK
+
+Vonage -> Phone : SMS 配信
+Phone -> User : SMS 受信\n「ヒント: 東京タワー付近を探索！」
+
+== 2. 配信ステータス Webhook ==
+
+Vonage -> Server : POST /webhooks/sms/status\n{"message_uuid":"msg-uuid-001",\n "status":"delivered",\n "client_ref":"hint-001"}
+activate Server
+
+Server -> WH : ParseMessageStatus(body)
+activate WH
+WH --> Server : *MessageStatus
+deactivate WH
+
+Server -> Server : status.Status.IsDelivered()\n→ true
+
+note right of Server
+  配信確認を DB に記録
+  client_ref でメッセージ特定
+end note
+
+deactivate Server
+
+== 3. ユーザーからの SMS 返信（Inbound） ==
+
+User -> Phone : SMS 送信\n「答えは42です」
+Phone -> Vonage : SMS
+Vonage -> Server : POST /webhooks/sms/inbound
+activate Server
+
+note right of Vonage
+  Messages API 形式:
+  {"message_uuid":"...",
+   "from":"81901234567",
+   "to":"81501234567",
+   "channel":"sms",
+   "message_type":"text",
+   "text":"答えは42です"}
+
+  または旧形式:
+  {"msisdn":"81901234567",
+   "text":"答えは42です"}
+end note
+
+Server -> WH : ParseInboundMessage(body)
+activate WH
+WH -> WH : Messages API 形式を試行\n→ 旧形式にフォールバック\n→ 統一形式に変換
+WH --> Server : *InboundMessage
+deactivate WH
+
+Server -> Server : msg.From → ユーザー特定\nmsg.Text → AI 処理
+
+Server -> SDK : SendSMS(ctx,\n  msg.From,\n  aiResponse,\n)
+SDK -> Vonage : POST /v1/messages
+Vonage -> Phone : SMS 配信
+Phone -> User : AI 応答受信
+
+deactivate Server
+
+== 4. Fluent Builder によるマルチチャネル送信 ==
+
+Server -> SDK : NewMessage().\n  To("81901234567").\n  WhatsApp().\n  Image(\n    "https://.../clue.jpg",\n    "謎の手がかり",\n  ).\n  ClientRef("clue-007").\n  Send(ctx)
+activate SDK
+SDK -> Vonage : POST /v1/messages\n{"channel":"whatsapp",\n "message_type":"image",\n "image":{"url":"...","caption":"..."}}
+Vonage --> SDK : 202 Accepted
+deactivate SDK
+
+Vonage -> Phone : WhatsApp 画像配信
+Phone -> User : 画像受信
+
+@enduml

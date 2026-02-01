@@ -1,0 +1,74 @@
+@startuml voice-answer-url
+!theme plain
+skinparam defaultFontName "Noto Sans CJK JP"
+skinparam backgroundColor #FEFEFE
+skinparam sequence {
+    ArrowColor #495057
+    LifeLineBorderColor #6C757D
+    ParticipantBackgroundColor #FFF3E0
+    ParticipantBorderColor #E65100
+}
+
+title Voice API — Answer URL 方式の発信フロー
+
+actor "ユーザー" as User
+participant "電話端末" as Phone
+participant "アプリサーバー\n(Webhook)" as Server
+participant "Voice SDK\nClient" as SDK
+participant "NCCO\nBuilder" as NCCO
+participant "Vonage\nVoice API" as Vonage
+
+== 発信リクエスト ==
+
+Server -> SDK : CreateCallToPhone(\n  ctx, "81901234567",\n  answerURL, eventURL,\n)
+activate SDK
+SDK -> Vonage : POST /v1/calls\n{"to": [{"type":"phone",...}],\n "answer_url": ["https://.../answer"],\n "event_url": ["https://.../event"]}
+activate Vonage
+Vonage --> SDK : {"uuid":"call-uuid","status":"started"}
+deactivate SDK
+
+Vonage -> Phone : 発信
+Phone -> User : 着信音
+User -> Phone : 応答
+
+== Vonage が Answer URL を呼び出し ==
+
+Vonage -> Server : GET /answer?uuid=call-uuid\n&conversation_uuid=conv-uuid\n&from=81901234567
+activate Server
+
+Server -> NCCO : NewNCCO().\n  Talk("ようこそ！").Japanese().BargeIn().Done().\n  Input().Speech().EventURL(inputURL).\n    EndOnSilence(1.5).Done().\n  Build()
+activate NCCO
+NCCO --> Server : NCCO
+deactivate NCCO
+
+Server --> Vonage : 200 OK\n[{"action":"talk",...},\n {"action":"input",...}]
+deactivate Server
+deactivate Vonage
+
+Vonage -> Phone : TTS 再生\n「ようこそ！」
+
+== 音声入力 → Input Webhook ==
+
+User -> Phone : 音声入力
+Phone -> Vonage : 音声データ
+Vonage -> Vonage : ASR（音声認識）
+
+Vonage -> Server : POST /input\n{"speech":{"results":[...]}}
+activate Server
+
+Server -> Server : ASRResult.BestTranscript()\nAI処理 → 応答NCCO生成
+
+Server -> NCCO : TalkJapanese(aiResponse)
+NCCO --> Server : NCCO
+
+Server --> Vonage : 200 OK\n[{"action":"talk","text":"..."}]
+deactivate Server
+
+Vonage -> Phone : TTS 再生（AI応答）
+
+== 通話イベント ==
+
+Vonage -> Server : POST /event\n{"status":"completed"}
+Server -> Server : CallEvent.IsTerminal()\n→ true（通話終了処理）
+
+@enduml

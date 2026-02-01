@@ -1,0 +1,98 @@
+@startuml ncco-builder
+!theme plain
+skinparam defaultFontName "Noto Sans CJK JP"
+skinparam backgroundColor #FEFEFE
+skinparam activity {
+    BackgroundColor #FFF3E0
+    BorderColor #E65100
+    FontSize 12
+}
+
+title NCCO Builder — メソッドチェーン構造
+
+|NCCOBuilder|
+start
+:NewNCCO();
+note right
+  空の actions 配列を作成
+end note
+
+|TalkBuilder|
+:Talk("テキスト");
+note right
+  action = "talk"
+  text = "テキスト"
+end note
+
+fork
+  :Japanese();
+  note right
+    voiceName = "Mizuki"
+    language = "ja-JP"
+  end note
+fork again
+  :VoiceName("Amy");
+fork again
+  :Language("en-US");
+fork again
+  :BargeIn();
+fork again
+  :Loop(2);
+fork again
+  :Premium();
+end fork
+
+:Done();
+note right
+  TalkBuilder → NCCOBuilder に戻る
+  action を actions 配列に追加
+end note
+
+|InputBuilder|
+:Input();
+
+fork
+  :Speech();
+  note right
+    type = ["speech"]
+  end note
+fork again
+  :DTMF();
+  note right
+    type = ["dtmf"]
+  end note
+fork again
+  :SpeechAndDTMF();
+end fork
+
+:EventURL("https://...");
+:EndOnSilence(1.5);
+:StartTimeout(5);
+:MaxDuration(30);
+:Done();
+
+|StreamBuilder|
+:Stream("https://audio.mp3");
+:BargeIn();
+:Done();
+
+|RecordBuilder|
+:Record();
+:Format("mp3");
+:BeepStart();
+:EndOnKey("#");
+:EventURL("https://...");
+:Done();
+
+|NCCOBuilder|
+:Notify(url, payload);
+
+:Build();
+note right
+  NCCO ([]Action) を返却
+  → JSON シリアライズ可能
+end note
+
+stop
+
+@enduml

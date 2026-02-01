@@ -1,0 +1,98 @@
+@startuml video-session-sequence
+!theme plain
+skinparam defaultFontName "Noto Sans CJK JP"
+skinparam backgroundColor #FEFEFE
+skinparam sequence {
+    ArrowColor #495057
+    LifeLineBorderColor #6C757D
+    ParticipantBackgroundColor #E8F5E9
+    ParticipantBorderColor #2E7D32
+}
+
+title Video API — セッション管理シーケンス
+
+actor "参加者 A" as UserA
+actor "参加者 B" as UserB
+participant "フロントエンド\n(React)" as Frontend
+participant "アプリサーバー" as Server
+participant "Video SDK\nClient" as SDK
+participant "Vonage\nVideo API" as Vonage
+
+== 1. セッション作成 + トークン発行 ==
+
+UserA -> Frontend : ルーム入室リクエスト
+Frontend -> Server : POST /rooms/:spotId/enter
+activate Server
+
+Server -> SDK : CreateSession(ctx, nil)
+activate SDK
+SDK -> Vonage : POST /session/create\nX-OPENTOK-AUTH: <JWT>\n{"archiveMode":"manual",\n "p2p.preference":"disabled"}
+activate Vonage
+Vonage --> SDK : {"session_id":"2_MX40..."}
+deactivate Vonage
+SDK --> Server : *Session
+deactivate SDK
+
+Server -> SDK : GenerateToken(sessionID).\n  Role(RolePublisher).\n  ExpireTime(now + 2h).\n  Data("userName=田中太郎").\n  Build()
+activate SDK
+SDK -> SDK : JWT 生成\n(session_id, role,\n expire_time をクレームに)
+SDK --> Server : token文字列
+deactivate SDK
+
+Server -> Server : セッションID を DB に保存
+
+Server --> Frontend : {"sessionId":"2_MX40...",\n "token":"T1==...",\n "apiKey":"12345"}
+deactivate Server
+
+Frontend -> Vonage : WebRTC 接続\n(sessionId + token)
+
+== 2. 他の参加者が入室 ==
+
+UserB -> Frontend : ルーム入室リクエスト
+Frontend -> Server : POST /rooms/:spotId/enter
+activate Server
+
+Server -> Server : 既存セッションID を取得
+
+Server -> SDK : GenerateToken(sessionID).\n  Role(RoleSubscriber).\n  Build()
+activate SDK
+SDK --> Server : token文字列
+deactivate SDK
+
+Server --> Frontend : {"sessionId":"2_MX40...",\n "token":"T1==...(subscriber)"}
+deactivate Server
+
+Frontend -> Vonage : WebRTC 接続
+
+Vonage -> Vonage : メディアルーティング\n(Publisher → Subscriber)
+
+== 3. 録画 ==
+
+Server -> SDK : StartRecording(ctx, sessionID, nil)
+activate SDK
+SDK -> Vonage : POST /v2/project/{apiKey}/archive\n{"sessionId":"2_MX40...",\n "outputMode":"composed"}
+Vonage --> SDK : {"id":"archive-id",\n "status":"started"}
+SDK --> Server : *Recording
+deactivate SDK
+
+note right of Vonage
+  録画中...
+  参加者の映像/音声を記録
+end note
+
+Server -> SDK : StopRecording(ctx, archiveID)
+activate SDK
+SDK -> Vonage : POST /v2/project/{apiKey}/archive/{id}/stop
+Vonage --> SDK : {"status":"stopped"}
+SDK --> Server : *Recording
+deactivate SDK
+
+== 4. トークンロール一覧 ==
+
+note over SDK
+  RolePublisher  — 配信 + 視聴
+  RoleSubscriber — 視聴のみ
+  RoleModerator  — 配信 + 視聴 + 管理
+end note
+
+@enduml

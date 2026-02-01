@@ -1,6 +1,6 @@
 # Vonage Go SDK
 
-個人的に作っているVonage API Go SDK です。Voiceなどは別途作るかも？
+VonaTrigger プロジェクト用の Vonage API Go SDK です。
 
 ## 構成
 
@@ -9,6 +9,11 @@ pkg/vonage/
 ├── auth.go             # JWT生成・RSA鍵パース
 ├── client.go           # 統合クライアント & 共通設定
 ├── errors.go           # カスタムエラー型
+├── voice/
+│   ├── client.go       # Voice API クライアント（Call管理）
+│   ├── ncco.go         # NCCOビルダー（Fluent API）
+│   ├── types.go        # Call, ASRResult, CallEvent等
+│   └── example_test.go # 使用例
 └── video/
     ├── client.go       # Video API クライアント
     ├── token.go        # トークン生成（Fluent Builder対応）
@@ -147,6 +152,144 @@ if session.IsMock {
 
 ## 今後の拡張予定
 
-- [ ] Voice API (`pkg/vonage/voice`)
+- [x] Video API (`pkg/vonage/video`)
+- [x] Voice API (`pkg/vonage/voice`)
 - [ ] Messages API (`pkg/vonage/messages`)
 - [ ] Verify API (`pkg/vonage/verify`)
+
+---
+
+## Voice APIの使用
+
+### 1. クライアント作成
+
+```go
+import (
+    vonage "github.com/vonatrigger/poc/pkg/vonage"
+    "github.com/vonatrigger/poc/pkg/vonage/voice"
+)
+
+creds, err := vonage.NewCredentials(
+    vonage.WithApplication("your-app-id", privateKeyPEM),
+    vonage.WithPhoneNumber("81501234567"),
+)
+
+client, err := voice.NewClientFromCredentials(creds)
+```
+
+### 2. 発信
+
+```go
+// Answer URLを使った発信
+resp, err := client.CreateCallToPhone(ctx, "81901234567",
+    "https://example.com/answer",
+    "https://example.com/event",
+)
+
+// インラインNCCOを使った発信
+ncco := voice.TalkJapanese("こんにちは！謎解きイベントへようこそ！")
+resp, err := client.CreateCallWithNCCO(ctx, "81901234567", ncco, "https://example.com/event")
+```
+
+### 3. NCCOビルダー（Fluent API）
+
+```go
+// 基本パターン: 日本語で話す → 音声入力を待つ
+ncco := voice.NewNCCO().
+    Talk("お電話ありがとうございます。何かお手伝いできることはありますか？").
+        Japanese().BargeIn().Done().
+    Input().Speech().
+        EventURL("https://example.com/input?conversationId=xxx").
+        EndOnSilence(1.5).StartTimeout(5).MaxDuration(30).Done().
+    Build()
+
+// Polly音声 → 音声入力パターン
+ncco := voice.NewNCCO().
+    Stream("https://s3.amazonaws.com/bucket/polly-audio.mp3").Done().
+    Input().Speech().
+        EventURL("https://example.com/input").
+        EndOnSilence(1.5).StartTimeout(5).MaxDuration(30).Done().
+    Build()
+
+// DTMFメニュー
+ncco := voice.NewNCCO().
+    Talk("1はヒント、2はストーリー、3は終了です。").Japanese().BargeIn().Done().
+    Input().DTMF().EventURL("https://example.com/dtmf").MaxDigits(1).TimeOut(10).Done().
+    Build()
+
+// 録音
+ncco := voice.NewNCCO().
+    Talk("メッセージを残してください。").Japanese().Done().
+    Record().Format("mp3").BeepStart().EndOnSilence(3).
+        EventURL("https://example.com/recording").Done().
+    Build()
+```
+
+### 4. ショートカット関数
+
+```go
+// 日本語 Talk + Speech Input (VonaTrigger標準パターン)
+ncco := voice.TalkAndInputJapanese(text, inputEventURL)
+
+// Stream + Speech Input (Polly音声パターン)
+ncco := voice.StreamAndInput(audioURL, inputEventURL, 1.5)
+
+// Talk のみ (ハングアップ前)
+ncco := voice.TalkJapanese(text)
+```
+
+### 5. 通話中の操作
+
+```go
+// 通話情報の取得
+info, _ := client.GetCallInfo(ctx, callUUID)
+fmt.Printf("Status: %s, Duration: %s\n", info.Status, info.Duration)
+
+// 通話の転送
+client.TransferCall(ctx, callUUID, "https://example.com/new-ncco")
+
+// ミュート / アンミュート
+client.MuteCall(ctx, callUUID)
+client.UnmuteCall(ctx, callUUID)
+
+// 通話中にTTSを流す
+client.TalkIntoCall(ctx, callUUID, "新しいヒントです！", "Mizuki", 1)
+
+// 通話中にストリーム音声を流す
+client.StreamIntoCall(ctx, callUUID, "https://example.com/audio.mp3", 1)
+
+// 通話終了
+client.HangupCall(ctx, callUUID)
+```
+
+### 6. ASR（音声認識）結果の処理
+
+```go
+// Webhookハンドラー内で
+var asr voice.ASRResult
+if err := c.Bind(&asr); err != nil { ... }
+
+if asr.HasSpeech() {
+    transcript := asr.BestTranscript()
+    // AI応答を生成...
+}
+
+if asr.HasDTMF() {
+    switch asr.DTMF {
+    case "1": // ヒント
+    case "2": // ストーリー
+    }
+}
+```
+
+### 7. 既存サービスからの移行
+
+```go
+// internal/service/vonage_voice_v2.go を使用
+voiceService, err := service.NewVonageServiceV2(cfg, secrets)
+
+// 同じインターフェースで使用可能（後方互換）
+callResp, err := voiceService.CreateCall(ctx, phoneNumber, answerPath, eventPath)
+ncco := voiceService.GenerateNCCO(text, inputEventURL)
+ncco := voiceService.GenerateNCCOWithStream(audioURL, inputEventURL)
+```
